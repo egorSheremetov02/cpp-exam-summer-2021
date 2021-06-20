@@ -188,11 +188,13 @@ static constexpr bool is_same_v = is_same<T, U>::value;
 Про расширяемы type-traits, например хотим специализировать свой собственный iterator для своего класса, чтобы работали всякие штуки по типу std::distance. Например специализация может пригодиться, если внутри нашего итератора нет `value_type`.
 
 ```C++
+namespace std {
 template <typename T>
 struct iterator_traits <MyMagicIterator<T>> {
 	using value_type = typename MyMagicIterator<T>::magic_value_type;
 	//....
 };
+}
 ```
 Еще есть `std::char_traits<T>`, которые позволяют работать со всякими символьными типами.
 Например если мы хотим сделать свой класс, который сравнивает 2 символа вне зависимости от регистра, то мы получим что-то такое:
@@ -200,15 +202,15 @@ struct iterator_traits <MyMagicIterator<T>> {
 ```C++
 
 struct case_insensitive_traits : char_traits<char> {
-	static bool lt(char a, char b) {tolower(a) < tolower(b)};
-	static bool eq(char a, char b) {tolower(a) == tolower(b)};
+	static bool lt(char a, char b) {return tolower(a) < tolower(b)};
+	static bool eq(char a, char b) {return tolower(a) == tolower(b)};
 	//...
 }; 
 
 using case_insensitive_string = std::basic_string<char, case_insensitive_traits>;
 ```
 
-Обычно свои `char_traits` это ужас и `tolower` -- древняя штука из C, ее тоже не используйте.
+Обычно свои `char_traits` это ужас, и `tolower` -- древняя штука из C, ее тоже не используйте.
 
 С этим нужно быть осторожным. Если вы взяли чей-то хэдер, специализировали свой класс (в своем хэдере), то потом можно случайно получить нарушение ODR. Более подробно:
 В `library.h` есть класс `Pupa<T>`. Что сделали вы в своем хэдере `my.h`:
@@ -278,7 +280,7 @@ void foo() noexcept(noexcept(T() + T())) {
 //...
 }
 ```
-Только вот T необязательно констурируется по умолчанию и мы не хотим проверять, что конструктор по умолчанию noexcept. Поэтому есть `std::declval<T>()`, который можно использовать только внутри невычислимых контекстов:
+Только вот T необязательно констурируется по умолчанию, и мы не хотим проверять, что конструктор по умолчанию noexcept. Поэтому есть `std::declval<T>()`, который можно использовать только внутри невычислимых контекстов:
 
 ```C++
 template <typename T>
