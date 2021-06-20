@@ -2,9 +2,31 @@
 
 > Автор: Шеремеев Андрей
 
+# Table of Contents
+1. [17-210209](##17-210209)
+    2. [Арифметика указателей](###Арифметика-указателей )
+        3. [Array-to-pointer decay](####Array-to-pointer-decay)
+        4. [One-past-last](####One-past-last)
+        5. [Void](#####Void)
+6. [19-210302](##19-210302)
+    7. [Aliasing](###Aliasing)
+        8. [Reinterpret-cast](####Reinterpret-cast)
+    9. [Plain-old-data](###Plain-old-data)
+10. [20-210309](##20-210309)
+    11. [c-str](###c-str)
+        12. [std::strlen](#####std::strlen) 
+        13. [std::strcpy](#####std::strcpy)
+        14. [Конкатенация](######Конкатенация)
+        15. [Вспомним-GTA-и-функцию-чтения-из-c-str](#####Вспомним-GTA-и-функцию-чтения-из-c-str)
+    12. [Семейство стандатный функций](###Семейство-стандатный-функций)
+        13. [Gets](####Gets)
+    14. [Pod](###Pod)
+
+    
 ## 17-210209
 
 ### Арифметика указателей 
+
 
 ```C++
 struct Base {
@@ -24,7 +46,7 @@ int main() {
     std::cout << &b[2] << "\n";
 
     Base *bptr = &b[0]; //заводим указатель и вручкую сдвигаем его 
-    					//не обязательно его заводить на первый элемент
+                        //не обязательно его заводить на первый элемент
     std::cout << bptr << "\n";
     std::cout << bptr + 1 << "\n";
     std::cout << bptr + 2 << "\n";
@@ -33,58 +55,56 @@ int main() {
 
 **[]** - синтаксический сахар над арифметикой указателей `a[b] ~~ *(a+b)`
 ```C++
-	Base *bptr2 = &b[1];
-    std::cout << bptr2 - 1 << "\n";
-    std::cout << bptr2 << "\n";
-    std::cout << bptr2 + 1 << "\n";
+Base *bptr2 = &b[1];
+std::cout << bptr2 - 1 << "\n";
+std::cout << bptr2 << "\n";
+std::cout << bptr2 + 1 << "\n";
 
-    std::cout << bptr2[0].x << " " << bptr2[0].y << "\n";  // (*(bptr2 + 0)).x ~~ (*&b[1]).x --- 300 400
-    std::cout << bptr2[-1].x << " " << bptr2[-1].y << "\n";  // (*(bptr2 - 1)).x ~~ (*(&b[1] - 1)).x ~~ (*&b[0]).x --- 100 200
-
+std::cout << bptr2[0].x << " " << bptr2[0].y << "\n";  // (*(bptr2 + 0)).x ~~ (*&b[1]).x --- 300 400
+std::cout << bptr2[-1].x << " " << bptr2[-1].y << "\n";  // (*(bptr2 - 1)).x ~~ (*(&b[1] - 1)).x ~~ (*&b[0]).x --- 100 200
 ```
 
 страшилки (не нужно так писать)
 ```C++
- 	std::cout << (-1)[bptr2].x << "\n";  // (*(-1 + bptr2)).x ---1000
-    std::cout << 1[bptr2].x << "\n";  // (*(1 + bptr2)).x --- 500
+std::cout << (-1)[bptr2].x << "\n";  // (*(-1 + bptr2)).x ---1000
+std::cout << 1[bptr2].x << "\n";  // (*(1 + bptr2)).x --- 500
 ```
 
 Указатель массива совпадает с указателем на первый элемент, но типы это разные (**нельзя**, например, присвоить)
 ```C++
-    Base *bp1 = &b;  // не компилируется: &b - это "указатель на массив", а не "указатель на элемент".
-
+Base *bp1 = &b;  // не компилируется: &b - это "указатель на массив", а не "указатель на элемент".
 ```
 
-##### Array-to-pointer decay
+#### Array-to-pointer decay
 можно считать, что это неявное преобразование
 ```C++
- 	Base *bp2 = b; //но вот так уже делать можно, wtf
+    Base *bp2 = b; //но вот так уже делать можно, wtf
 
-	/*
-	пример:
-	 int arr[]{1, 2, 3, 4};
-     std::sort(arr, arr + 4); 
+/*
+пример:
+ int arr[]{1, 2, 3, 4};
+ std::sort(arr, arr + 4); 
 неявная конвертация arr в указатель на 1 элемент, и указатель на после последнего, потом сортилось 
 */
 
- 	auto *bp3 = b;
-    auto bp4 = b;  // auto тоже делает array-to-pointer decay; массивы-то копировать нельзя.
+    auto *bp3 = b;
+auto bp4 = b;  // auto тоже делает array-to-pointer decay; массивы-то копировать нельзя.
 
-    std::cout << boost::core::demangle(typeid(bp2).name()) << "\n"; // Base*
-    std::cout << boost::core::demangle(typeid(bp3).name()) << "\n"; // Base*
-    std::cout << boost::core::demangle(typeid(bp4).name()) << "\n"; // Base*
+std::cout << boost::core::demangle(typeid(bp2).name()) << "\n"; // Base*
+std::cout << boost::core::demangle(typeid(bp3).name()) << "\n"; // Base*
+std::cout << boost::core::demangle(typeid(bp4).name()) << "\n"; // Base*
 
 ```
 
-##### One-past-last
+#### One-past-last
 
 ```C
 
 int main() {
     int arr[4];
 
-    int *x0 = &arr[0];	// OK
-    int *x3 = &arr[3]; 	// OK
+    int *x0 = &arr[0];  // OK
+    int *x3 = &arr[3];  // OK
     int *x4 = &arr[4];  // UB: не существует arr[4].
 
     int *p = arr; //уже знаем, что это неявное преобразование (array-to-pointer decay)
@@ -98,7 +118,7 @@ int main() {
     int *p0b = p - 1 + 1;  // UB: (p - 1) + 1
 }
 ```
-##### Преколы с Void 
+#### Преколы с Void 
 
 `void *` - указатель куда-то, разыменовывать нельзя - CE (compile error) 
 
@@ -116,7 +136,7 @@ int main() {
     x++;  // O_O: расширение GCC: работает, как с char* (есть арифметика указателей, но по стандарту так делать нельзя!)
 
 ```
-
+---
 ## 19-210302
 
 ### Aliasing 
@@ -126,36 +146,36 @@ int main() {
 #### Reinterpret-cast 
 
 ```C
-	int x = 123456;
-    char *xc = reinterpret_cast<char*>(&x);
-    // Разворачивается в такую штуку:
-    // char *xc = static_cast<char*>(static_cast<void*>(&x));
-    // один 'static_cast' тут бы не помог 
-    for (std::size_t i = 0; i < sizeof(x); i++) {
-    	//выводим байты
-        std::cout << static_cast<int>(xc[i]) << "\n";
-    }
+int x = 123456;
+char *xc = reinterpret_cast<char*>(&x);
+// Разворачивается в такую штуку:
+// char *xc = static_cast<char*>(static_cast<void*>(&x));
+// один 'static_cast' тут бы не помог 
+for (std::size_t i = 0; i < sizeof(x); i++) {
+    //выводим байты
+    std::cout << static_cast<int>(xc[i]) << "\n";
+}
 ```
 
 Пример того, как NOT OK - нельзя смотреть на объекты через указатель другого типа (исключение -char)
 ```C
-	float f = 1.0;
-	static_assert(sizeof(float) == sizeof(int));
+float f = 1.0;
+static_assert(sizeof(float) == sizeof(int));
 
-    int *x = reinterpret_cast<int*>(&f);
-    std::cout << std::hex << *x /* UB */ << "\n";
+int *x = reinterpret_cast<int*>(&f);
+std::cout << std::hex << *x /* UB */ << "\n";
 
-    // Strict aliasing rule:
-    // Можно через указатель p типа T1 обращаться к объекту типа T2 только если:
-    // 1. T1 == T2 (но T1 может быть более const)
-    // 2. T1 --- базовый класс T2
-    // .....
-    // 10. T1 == char
+// Strict aliasing rule:
+// Можно через указатель p типа T1 обращаться к объекту типа T2 только если:
+// 1. T1 == T2 (но T1 может быть более const)
+// 2. T1 --- базовый класс T2
+// .....
+// 10. T1 == char
 
-    // Выше нарушаем: T1 == int, T2 == float.
+// Выше нарушаем: T1 == int, T2 == float.
 
-    // Тут тоже нарушение с точки зрения C++: https://en.wikipedia.org/wiki/Fast_inverse_square_root
-    // Но, возможно, не с точки зрения C.
+// Тут тоже нарушение с точки зрения C++: https://en.wikipedia.org/wiki/Fast_inverse_square_root
+// Но, возможно, не с точки зрения C.
 
 ```
 
@@ -173,70 +193,68 @@ int func(int *a, float *b) {
 Пример нарушения:
 Тут отработает корректно и вывод будет `10, 10, 123.45` 
 ```C
- 	{
-        int a = 15;
-        float b = 456.78;
-        int res = func(&a, &b);
-        std::cout << "res=" << res << "\n";
-        std::cout << "a=" << a << "\n";
-        std::cout << "b=" << b << "\n";
-	}
+{
+    int a = 15;
+    float b = 456.78;
+    int res = func(&a, &b);
+    std::cout << "res=" << res << "\n";
+    std::cout << "a=" << a << "\n";
+    std::cout << "b=" << b << "\n";
+}
 
 ```
 А вот тут в `a` запишется полная дичь, потому что `reinterpret_cast` как раз нарушает aliasing
 ```C
-	{
-        int a = 15;
-        int res = func(&a, reinterpret_cast<float*>(&a));
-        std::cout << "res=" << res << "\n";
-        std::cout << "a=" << a << "\n";
-    }
-
+{
+    int a = 15;
+    int res = func(&a, reinterpret_cast<float*>(&a));
+    std::cout << "res=" << res << "\n";
+    std::cout << "a=" << a << "\n";
+}
 ```
 
 Но если мы заменим `float` -> `char`, то работать будет как в примере с выводом байт, тк через указатель на char можно обращаться к чему угодно 
 
 Можно еще менять байтики 
 ```C
- 	int x = 123456;
-    char *xc = reinterpret_cast<char*>(&x);
-    static_assert(sizeof(int) == 4);
+int x = 123456;
+char *xc = reinterpret_cast<char*>(&x);
+static_assert(sizeof(int) == 4);
 
-    xc[0] = 10;
-    xc[1] = 11;
-    xc[2] = 12;
-    xc[3] = 13;
-    std::cout << std::hex << x << "\n";
+xc[0] = 10;
+xc[1] = 11;
+xc[2] = 12;
+xc[3] = 13;
+std::cout << std::hex << x << "\n";
 ```
 
 А так делать плохо, потому что конвертируем в `int`, а на самом деле это массив `char`
 ```C
-	char xc[] = {10, 11, 12, 13};
-    static_assert(sizeof(int) == 4);
+char xc[] = {10, 11, 12, 13};
+static_assert(sizeof(int) == 4);
 
-    int *xptr = reinterpret_cast<int*>(xc);
-    std::cout << std::hex << *xptr /* UB */ << "\n";
-    // T1 == int, T2 == char. Нельзя.
-
+int *xptr = reinterpret_cast<int*>(xc);
+std::cout << std::hex << *xptr /* UB */ << "\n";
+// T1 == int, T2 == char. Нельзя.
 ```
 
 **Вывод** - через `char` можно объекты менять и читать, но читать `char` как объекты - нельзя 
 
 Пример правильно конвертации `float` -> `int` (важно, что это `char*`) (аналог `std::memcpy`)
 ```C
-	float x = 1.0;
-    int y;
+float x = 1.0;
+int y;
 
-    static_assert(sizeof(x) == sizeof(y));
-    // Аналог std::memcpy. Не UB.
-    // Начиная с C++20 есть bit_cast<>.
-    for (int i = 0; i < 4; i++) {
-        reinterpret_cast<char*>(&y)[i] = reinterpret_cast<char*>(&x)[i];
-    }
+static_assert(sizeof(x) == sizeof(y));
+// Аналог std::memcpy. Не UB.
+// Начиная с C++20 есть bit_cast<>.
+for (int i = 0; i < 4; i++) {
+    reinterpret_cast<char*>(&y)[i] = reinterpret_cast<char*>(&x)[i];
+}
 
-    std::cout << std::hex << y << "\n";
+std::cout << std::hex << y << "\n";
 ```
-
+---
 ### Plain-old-data 
 Нет виртуальности, нет нетривиальных конструкторов/деструкторов/полей/базовых классов.
 Простые базовые классы могут быть.
@@ -289,6 +307,7 @@ struct MyPod {
 
 Про `std::string` - работать не будет в такой структуре, это не тривиальный тип и непонятно куда указатели у него 
 
+---
 ## 20-210309
 
 ### c-str
@@ -296,14 +315,15 @@ struct MyPod {
 Конвенция для хранения строк - массив байт `char arr[]`
 Массив байт всегда(!) заканчивается нулевым символом, поэтому размер такого массива всегда (+1), тк мы можем завести указатель на строчку и вывести нашу строку (а ему нужно знать, куда ссылаться по памяти)
 
+Время жизни строкового литерала - `static`. 
+
 ```C
-	char arr[] = "Hello";
-	//   char arr[] = {'H', 'e', 'l', 'l', 'o', 0 /*'\0'*/};
-    std::cout << sizeof(arr) << "\n";
+char arr[] = "Hello";
+//   char arr[] = {'H', 'e', 'l', 'l', 'o', 0 /*'\0'*/};
+std::cout << sizeof(arr) << "\n";
 
-    char *str = arr;
-    std::cout << str << "\n";
-
+char *str = arr;
+std::cout << str << "\n";
 ```
 
 Если не указывать `0` в конце - UB. 
@@ -311,46 +331,45 @@ struct MyPod {
 Тут работает арифметика указателей - тогда выведется суффикс строки 
 
 ```C
-	char arr[] = "Hello";
-	char *str = arr + 2;
-	std::cout << str << "\n"; // llo
+char arr[] = "Hello";
+char *str = arr + 2;
+std::cout << str << "\n"; // llo
 ```
 
 На самом деле тип строкового литерала (это не `char*` / `const char*`) - это `char [6]` массивы `char` размера - длина строки + 1
 ```C
-    std::cout << boost::core::demangle(typeid("Hello").name()) << "\n";
-
+std::cout << boost::core::demangle(typeid("Hello").name()) << "\n";
 ```
 
 Но могут быть проблемы, если вставить символ `\0` в середину строки.
 В случае, когда мы выводим всю строку - нулевой символ считается пробелом 
 ```C
- 	char arr[] = "Wow\0Foo";
-	std::cout << sizeof(arr) << "\n"; 									// 8
-	std::cout << arr << "\n";											// Wow
-	std::cout << std::string(arr) << "\n";								// Wow
-	std::cout << std::string(arr, arr + sizeof(arr)) << "\n"; 			// Wow Foo
-	std::cout << std::string(std::begin(arr), std::end(arr)) << "\n";   // Wow Foo
-	std::cout << arr + 4 << "\n";										// Foo 
+    char arr[] = "Wow\0Foo";
+std::cout << sizeof(arr) << "\n";                                   // 8
+std::cout << arr << "\n";                                           // Wow
+std::cout << std::string(arr) << "\n";                              // Wow
+std::cout << std::string(arr, arr + sizeof(arr)) << "\n";           // Wow Foo
+std::cout << std::string(std::begin(arr), std::end(arr)) << "\n";   // Wow Foo
+std::cout << arr + 4 << "\n";                                       // Foo 
 ```
 
 ##### std::strlen
 ```C
-	char arr[] = "Hello World";
-	std::cout << std::strlen(arr) << "\n"; 		// 11
-	std::cout << std::strlen(arr + 3) << "\n"; 	// 8
+char arr[] = "Hello World";
+std::cout << std::strlen(arr) << "\n";      // 11
+std::cout << std::strlen(arr + 3) << "\n";  // 8
 
-	// реализация 
-	auto my_strlen = [&](const char *s){
-    	int len = 0;
-    	while (s[len] != 0) {
-    	  len++;
-   		}
-    	return len;
-  	};
+// реализация 
+auto my_strlen = [&](const char *s){
+    int len = 0;
+    while (s[len] != 0) {
+      len++;
+        }
+    return len;
+    };
 
-	std::cout << my_strlen(arr) << "\n"; 		// 11
-	std::cout << my_strlen(arr + 3) << "\n";	// 8
+std::cout << my_strlen(arr) << "\n";        // 11
+std::cout << my_strlen(arr + 3) << "\n";    // 8
 ```
 
 
@@ -361,7 +380,7 @@ struct MyPod {
 void my_strcpy(char *dest, const char *src) {
     for (int i = 0;; i++) {
         dest[i] = src[i];
-        if (!src[i]) { 		//скопировали нулевой байт
+        if (!src[i]) {      //скопировали нулевой байт
             return;
         }
     }
@@ -372,10 +391,10 @@ void run(char *foo, char *bar, char *baz) {
     std::cout << "|" << foo << "|" << bar << "|\n"; // World World
 
     my_strcpy(foo, baz);
-    std::cout << "|" << foo << "|\n"; 				// Hi 
-    												// если не было if(!src[i]), было бы 'Hirld'
+    std::cout << "|" << foo << "|\n";               // Hi 
+                                                    // если не было if(!src[i]), было бы 'Hirld'
 
-    my_strcpy(foo, "12345");  // OK.				// 12345
+    my_strcpy(foo, "12345");  // OK.                // 12345
     std::cout << "|" << foo << "|\n";
 
     my_strcpy(foo, "123456");  // UB! (выход за границы массива) Но мы про это не знаем.
@@ -398,75 +417,299 @@ int main() {
 
 ```C
 void my_strncpy(char *dest, const char *src, int n) {
-    for (int i = 0; i < n; i++) {  	// <n 
-        dest[i] = src[i];
-        if (!src[i]) {
-            return;
-        }
+for (int i = 0; i < n; i++) {   // <n 
+    dest[i] = src[i];
+    if (!src[i]) {
+        return;
     }
+}
 }
 
 int main() {
-    char foo[] = "Hello";
-    my_strncpy(foo, "123456", sizeof foo);  // UB отсутствует.
-    std::cout << foo << "\n";  // UB! Строчка не null-terminated.
+char foo[] = "Hello";
+my_strncpy(foo, "123456", sizeof foo);  // UB отсутствует.
+std::cout << foo << "\n";  // UB! Строчка не null-terminated.
 
-    strncpy(foo, "123456", sizeof foo);  // UB отсутствует.
-    std::cout << foo << "\n";  // UB! Строчка не null-terminated.
+strncpy(foo, "123456", sizeof foo);  // UB отсутствует.
+std::cout << foo << "\n";  // UB! Строчка не null-terminated.
 }
 ```
 
 Прелесть в том, что можно поделить строку, вставив на проебельные символу 0, без перевыделения памяти (с `std::vector` такое не прокатит)
 ```C
    char command_line[] = "arg1 arg2 arg3";
-    // std::strtok занимается примерно этим.
-    for (int i = 0; command_line[i]; i++) {
-        if (command_line[i] == ' ') {
-            command_line[i] = 0;
-        }
+// std::strtok занимается примерно этим.
+for (int i = 0; command_line[i]; i++) {
+    if (command_line[i] == ' ') {
+        command_line[i] = 0;
     }
+}
 
-    std::vector<char*> args = {
-        command_line + 0,
-        command_line + 5,
-        command_line + 10,
-    };
-    std::cout << args[0] << "\n"; // arg1
-    std::cout << args[1] << "\n"; // arg2
-    std::cout << args[2] << "\n"; // arg3
+std::vector<char*> args = {
+    command_line + 0,
+    command_line + 5,
+    command_line + 10,
+};
+std::cout << args[0] << "\n"; // arg1
+std::cout << args[1] << "\n"; // arg2
+std::cout << args[2] << "\n"; // arg3
 ```
 
 `sizeof(argv[i])` - берет размер типа, то есть это равно `sizeof(char*`, так вообще делать нельзя, если строчка не `const`!, если нужен размер - `strlen`
 ```C
-	for (int i = 0; i < argc; i++) {
-        std::cout << "argv[]="
-                  << argv[i]
-                  << "; strlen="
+for (int i = 0; i < argc; i++) {
+    std::cout << "argv[]="
+              << argv[i]
+              << "; strlen="
 //                  << sizeof(argv[i])  // Так нельзя делать никогда! Это sizeof(char*)
-                  << std::strlen(argv[i])
-                  << "; p="
-                  << static_cast<void*>(argv[i]) << "\n";
-    }
+              << std::strlen(argv[i])
+              << "; p="
+              << static_cast<void*>(argv[i]) << "\n";
+}
 ```
 
 
 ###### Конкатенация
-
- так делать нельзя - складывать 2 указателя - бред
- ```C
- /*const*/ char* a = "hello ";  // Время жизни строкового литерала - static, управляет компилятор.
-    // a[0] = 'x';  // UB.
-
+Так делать нельзя - складывать 2 указателя - бред
+```C
+/*
+    char* a = "hello "; 
     const char* b = "world";
-    // std::cout << (a + b) << "\n";
- ```
+    std::cout << (a + b) << "\n";
+*/
+    //но так можно 
+     std::cout << ("Hello" " World") << "\n";  // Костыль на этапе компиляции(!).
+                                               // Только для литералов.
+
+    // std::cout << (a b) << "\n";             // Так тоже нельзя
+
+```
+
+Время жизни строкового литерала - `static`. 
+
+замечание : `const char*` -> `char*` нельзя, но наоборот можно 
+
+вот такой свой конкатенатор вызывает UB, потому что никто не гарантировал нам, что в память после этой строки можно еще что-то записывать 
+```C
+ // Расширение GCC: можно записывать строковой литерал в char* для совместимости со старым кодом.
+    // Но писать туда всё ещё нельзя.
+    /*const*/ char* a = "hello "; 
+```
+
+```C
+void my_strcat(char *a, const char *b) {
+    int a_pos = std::strlen(a);
+    for (int b_pos = 0; b[b_pos]; b_pos++) {
+        std::cout << "b_pos=" << b_pos << "\n";
+        a[a_pos++] = b[b_pos];
+    }
+    a[a_pos] = 0;
+}
+```
+
+Литералы могут склеиваться 
+```C
+const char *p1 = "hello";
+const char *p2 = "hello";
+//указатели совпадут
+std::cout << static_cast<const void*>(p1) << " " << static_cast<const void*>(p2) << "\n";
+```
 
 
+```C
+char arr[] = "hello "; //если тут большой буфер, то может быть и не UB 
+my_strcat(arr, b);  // UB: выход за границу массива.
+std::cout << arr << "\n";
+```
+
+Важно заводить буфер с учетом нулевого литерала 
+```C
+char arr[11] = "hello ";
+const char* b = "world";
+my_strcat(arr, b);  // UB: нет места под null-terminator. Стреляет редко, но больно.
+std::cout << arr << "\n";
+std::cout << strlen(arr) << "\n";
+assert(strlen(arr) == 11);
+```
+
+Попробуем написать `my_strcat` лучше 
+```C
+void my_strcat(char *&a, const char *b) {
+char *out = new char[strlen(a) + strlen(b) + 1];
+
+std::strcpy(out, a);
+std::strcpy(out + strlen(a), b);
+
+delete[] a;
+a = out;
+}
+```
+
+Такой код будет работать, но если создаем строку не через `new`, это работать не будет
+```C
+// ОК, но очень странно выглядит.
+char *a = new char[6];
+std::strcpy(a, "hello");
+char b[] = " world";
+my_strcat(a, b);
+// my_strcat(a + 1, b);  // UB: будет delete из середины куска памяти.
+std::cout << a << "\n";
+delete[] a;
+```
+
+Это UB, тк тут удаляем часть массива 
+```C
+char a[] = "hello";
+char b[] = " world";
+char *aptr = a;
+my_strcat(aptr, b);
+std::cout << aptr << "\n";
+```
+
+##### Вспомним GTA и функцию чтения из c-str 
+
+Хороший вариант написать функцию, которая будет работать на самом деле за `O(n^2)`
+
+```C
+auto read_int = [](const char *s) {
+    int value = 0;
+    for (std::size_t i = 0; i < std::strlen(s); i++) {
+        if ('0' <= s[i] && s[i] <= '9') {
+            value = value * 10 + s[i] - '0';
+        } else {
+            break;
+        }
+    }
+    return value;
+};
+
+static char str[10'000'000];
+for (std::size_t i = 0; i < sizeof(str); i++)
+    str[i] = '0' + i % 10;
+str[sizeof(str) - 1] = 0;
+
+str[5] = ' ';
+str[10] = ' ';
+std::cout << read_int(str) << "\n";
+for (int i = 0; i < 100'000; i++) {
+    assert(read_int(str) == 1234);
+}
+```
+---
+### Семейство стандатный функций 
+
+#### Gets
+
+`gets` считывает строчку из стандартного потока ввода, при ввыводе `%s` - значит тут должна быть строка
+```C
+std::printf("> ");
+char command[10];   //команда максимум из 9 символов
+gets(command);  // Может случиться переполнение буфера (buffer overflow).
+// Top-1 уязвимостей в мире: https://ulearn.me/course/hackerdom/Perepolnenie_steka_3bda1c2c-c2a1-4fb0-9146-fccc47daf93b
+
+std::printf("command is |%s|\n", command);
+```
+
+Как это чинить? (ограничение буффера) - `fgets` (но строка обрежеься, если она будет больше, чем мы указали)
+```C
+std::printf("> ");
+char command[10];
+std::fgets(command, sizeof command, stdin);  // Всегда делает null-terminated строчку.
+                                             // Обрезает ввод.
+// Плюсовый std::string не обрезает, но может слопать всю память :(
+std::printf("command is |%s|\n", command);
+```
+
+---
+**Заметки**
+
+* Строка в стиле Си: char* из ненулевых символов, в конце ноль (\0).
+    * Длина вычисляется за O(n), это упс.
+* Ничего не знаем про размер буфера.
+    * Знаем, если массив, а не указатель.
+* Функциям, которые изменяют длину, хорошо бы проверять размер буфера.
+    * Память традиционно (пере)выделяет пользователь.
+
+---
+### Pod
+
+Если хранится массив `char`, то можем быстро записывать в файл и читать из него эту информацию.
+```C
+struct Person {
+    char first_name[31]{};
+    char last_name[31]{};
+};
+
+int main() {
+    {
+        Person p;
+        std::strcpy(p.first_name, "Konstantin");
+        std::strcpy(p.first_name, "Ivan"); //Тут перезапишется, но будет остаток Константина^^ 
+        std::strcpy(p.last_name, "Ivanov");
+        {
+            std::ofstream f("01.bin", std::ios::binary);
+            f.write(reinterpret_cast<const char*>(&p), sizeof p);
+        }
+    }      
+    {
+        Person p;
+        {
+            std::ifstream f("01.bin", std::ios::binary);
+            f.read(reinterpret_cast<char*>(&p), sizeof p);
+        }
+        std::cout << p.first_name << "\n";
+        std::cout << p.last_name << "\n";
+    }
+```
+
+Но с `char*` такое уже не прокатит. Тк просто запишутся указатели да память для этого конкретного файла. Аналогично будет и для `std::string`
+```C
+struct Person {
+    char *first_name;
+    char *last_name;
+    /*
+    std::string first_name;
+    std::string last_name;
+    */
+};
+
+int main() {
+    Person p;
+    p.first_name = "Ivan";
+    p.last_name = "Ivanov";
+
+    {
+        std::ofstream f("02.bin", std::ios::binary);
+        f.write(reinterpret_cast<const char*>(&p), sizeof p);
+    }
+    /*
+        std::ofstream f("03.bin", std::ios::binary);
+        f.write(reinterpret_cast<const char*>(&p), sizeof p);  // UB.
+        // Потому что std::string - не POD. Точнее: не Trivial. Точнее: не TrivialCopyable.
+        // Надо что-то такое (плюс как-то указать длину, чтобы можно было прочитать):
+        // f.write(p.first_name.data(), p.first_name.size());
+    */
+}
+```
+
+Аккуратно, если работает со `std::string`
 
 
-
-
-
-
-
-
+```C
+{
+    std::string s{'h', 0, 'w'};
+    std::cout << s << "\n";         // h w
+    std::cout << s.size() << "\n";  // 3
+    std::cout << s.c_str() << "\n"; // h 
+                                    // Сишная строка обрезалась по '0'.
+    std::cout << s.data() << "\n";  // h
+                                    // До C++11 UB: может быть не null-terminated. После C++11 то же самое, что c_str().
+}
+{
+    std::string s = "h\0w";          // подумает, что это char* 
+    std::cout << s << "\n";          // h
+    std::cout << s.size() << "\n";   // 1
+    std::cout << s.c_str() << "\n";  // h
+    std::cout << s.data() << "\n";   // h
+}
+```
