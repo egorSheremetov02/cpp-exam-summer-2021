@@ -1,4 +1,4 @@
-## Proxy && vector<bool>
+## Proxy && vector bool
 
 * Если написать что-то вроде:
 ```c++
