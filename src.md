@@ -148,6 +148,8 @@ int main() {
 }
 ```
 
+### Fold expressions ###
+
 C++17.
 Поитерируемся по данным аргументам.  Для этого применяется оператор `','`.
 Напомним, что оператор `','` в выражении `(a, b)` выполняет сначала `a`, потом `b`
@@ -216,6 +218,74 @@ int main() {
 
 Способ проверить типы: `static_assert((... && std::is_same_v<Ts, int>));`,
 начиная с C++20- requires после объявления шаблонных параметров в сигнатуре.
+
+Можно менять ассоциативность при развертывании аргументов:
+ 
+* `(args + ...) = arg0 + (arg1 + arg2)`
+* `(... + args) = (arg2 + arg1) + arg0`
+* Для унарного `fold expression`  требуется непустой args, кроме операторов `&& || ,`
+* Бинарный `(0 + ... + args)` может работать и с пустым
+* Аналогично с ассоциативаностью: `(args + ... + 0) = arg0 + (arg1 + 0)`
+* `(0 + ... + args) = (0 + args) + arg1`
+ 
+## Tuple ##
+
+Чтобы написать `std::tuple` воспользуемся частичной реализацией шаблонов.
+
+```cpp
+template<typename ...Ts> struct tuple{};
+
+template<typename T, typename ...Args> 
+struct tuple<T, Args...> {
+    T head;
+    tuple<Args...> tail;
+} inst;
+```
+
+Зная, что обращение, например, к 2-му элементу происходит при помощи `inst.tail.head`, легко написать `get`.
+
+Чтобы узнать размер `tuple` создадим вспомогательную метафункцию:
+
+```cpp
+template<typename> struct tuple_size {};
+template<typename ...Args>
+struct tuple_size<tuple<Args...>>
+    : std::integral_constant<std::size_t, sizeof...(Args)> {};
+```
+
+`std::integral_constant` хранит поле `value` типа `std::size_t`, в которое
+записывается значение размера структуры.
+
+Также можно написать функции `tuple_element`, которая по номеру элемента
+выдает его тип, и `get`- выдает значение элемента:
+
+```cpp
+template<std::size_t, typename> struct tuple_element;
+
+template<typename Head, typename ...Tail>
+struct tuple_element<0, tuple<Head, Tail...>> {
+    using type = Head;
+};
+
+template<std::size_t I, typename Head, typename ...Tail>
+struct tuple_element<I, tuple<Head, Tail...>> :  
+    tuple_element<I - 1, tuple<Tail...>> {
+};
+
+tuple_element<0, tuple<int, string>>::type; // = int
+tuple_element<1, tuple<int, string>>::type; // = string
+```
+
+```cpp
+template<std::size_t I, typename ...Ts>
+auto get(const tuple<Ts...> &tuple) {
+    if constexpr (I == 0) return tuple.head;
+    else                  return get<I - 1>(tuple.tail); 
+}
+```
+
+Здесь используется `if constexpr` (с C++17). Этот `if` позволяет не
+только проверять константые условия, но и компилировать только одну из веток.
 
 ## Perfect forwarding ##
 
@@ -435,6 +505,8 @@ int main() {
 все значения переменных копируются внутрь потока. Однако, что
 если есть необходимость передать ссылку на переменную внутрь потока?
 Сделать при помощи `void worker(int x, int& y)` нельзя, так как тогда появляются какие-то разделяемые данные с потоком, а это вероятнее всего не то, что хотелось.
+
+### Решение ###
 
 Для решения этой проблемы есть конструкция `std::ref`. `std::ref` возвращает конструкцию `std::reference_wrapper`, которая хранит
 в себе указатель на переденное значение и неявно конвертируется в
