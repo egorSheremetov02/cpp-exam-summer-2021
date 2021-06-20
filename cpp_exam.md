@@ -547,6 +547,25 @@ std::future<std::string> input_future = std::async([]() {
 });
 ```
 ---
+### latch
+```cpp
+class latch {
+    std::mutex m;
+    int counter;
+    std::condition_variable counter_changed;
+
+public:
+    explicit latch(int counter_) : counter(counter_) {
+    }
+    void arrive_and_wait() {
+        std::unique_lock l(m);
+        counter--;
+        counter_changed.notify_all();
+        counter_changed.wait(l, [&]() { return counter <= 0; });
+    }
+};
+```
+---
 ## Немного про reordering (off-top)
 Рассмотрим такой пример
 ```cpp
