@@ -6,9 +6,9 @@
 
 ```c++
 template <typename F, typename ...Ts>
-/*непонятно, что тут написать*/ logged(F f, Ts &&...args) {
-std::cout << "Before function invocation" << std::endl;
-return f((std::forward<Ts>(args))...);
+   /*непонятно, что тут написать*/ logged(F f, Ts &&...args) {
+   std::cout << "Before function invocation" << std::endl;
+   return f(std::forward<Ts>(args)...);
 }
 ```
 
@@ -62,19 +62,19 @@ decltype((x)); // int &
 int x;
 
 auto foo() {
-// --> int foo()
-return x;
+   // --> int foo()
+   return x;
 }
 
 decltype(auto) bar() {
-// --> int bar (выводится int, так как 'x' был объявлен c типом int)
-return x;
+   // --> int bar (выводится int, так как 'x' был объявлен c типом int)
+   return x;
 }
 
 decltype(auto) baz() {
-// --> int & baz() (выводится int&, так как тип выводится по правилам decltype)
-// это выражение
-return (x);
+   // --> int & baz() (выводится int&, так как тип выводится по правилам decltype)
+   // это выражение
+   return (x);
 }
 
 ```
@@ -84,8 +84,8 @@ return (x);
 ```c++
 template <typename F, typename ...Ts>
 decltype(auto) logged(F f, Ts &&...args) {
-std::cout << "Before function invocation" << std::endl;
-return f(std::forward<Ts>(args)...);
+   std::cout << "Before function invocation" << std::endl;
+   return f(std::forward<Ts>(args)...);
 }
 ```
 
@@ -93,8 +93,8 @@ return f(std::forward<Ts>(args)...);
 
 ```c++
 auto logged =[&](auto f, auto &&...args) -> decltype(auto) {
-std::cout << "Before function invocation" << std::endl;
-return f(std::forward<decltype(args)>(args)...);
+   std::cout << "Before function invocation" << std::endl;
+   return f(std::forward<decltype(args)>(args)...);
 };
 ```
 
@@ -106,11 +106,10 @@ return f(std::forward<decltype(args)>(args)...);
 
 ```c++
 struct S {
-int x = 1;
-int y = 2;
-int foo(int t) { return x + y + t; }
-int bar(int t) const {
-return x + y + t + 10; }
+  int x = 1;
+  int y = 2;
+  int foo(int t) { return x + y + t; }
+  int bar(int t) const { return x + y + t + 10; }
 };
 
 S obj;
@@ -162,3 +161,96 @@ int (S::*barptr)(int) const = &S::bar;
 2. Указатель на метод несовместим даже с обычными указателями на функцию
    1. Бывают виртуальные функции и виртуальное наследование
    2. Надо поддерживать преобразования по иерархии
+
+
+## SFINAE
+
+Для начала, **SFINAE** расшифровывается как **S**ubstitution **F**ailure **I**s **N**ot **A**n **E**rror
+
+Общий смысл таков: если при подстановке шаблонных параметров в сигнатуру функции произошла ошибка, то компилятор просто 
+считает, что этой перегрузки как бы нет. Моментальной ошибки компиляции не происходит, 
+она может возникнуть потом, если ни одна перегрузка не подойдёт.
+
+Например, это вполне валидный пример того, что SFINAE действительно работает
+
+```c++
+template<typename T>
+void duplicate_element(T &container, typename T::iterator iter) {
+    container.insert(iter, *iter);
+}
+
+template<typename T>
+void duplicate_element(T *array, T *element) {
+   assert(array != element);
+   *(element - 1) = *element;
+}
+
+std::vector a{1, 2, 3};
+duplicate_element(a, a.begin() + 1);
+int b[] = {1, 2, 3};
+duplicate_element(b, b + 1); // Нет ошибки, когда пробуем первую перегрузку: не бывает int[]::iterator, но это не ошибка компиляции. SFINAE.
+```
+
+Вот ещё пример корректного использования SFINAE
+
+```c++
+struct BotvaHolder {
+    using botva = int;
+};
+
+template<typename T> using GetBotva = typename T::botva;
+
+template<typename T>
+void foo(T, GetBotva<T>) {  // Просто псевдоним, так можно, проблемы возникают как бы "тут".
+    std::cout << "1\n";
+}
+
+template<typename T>
+void foo(T, std::nullptr_t) {
+    std::cout << "2\n";
+}
+
+ foo(BotvaHolder(), 10);  // 1
+ foo(BotvaHolder(), nullptr);  // 2
+ // foo(10, 10);  // CE
+ foo(10, nullptr); // 2
+```
+
+Тут в случае, когда мы подставляем std::nullptr_t в качестве типа `T`, происходит ошибка при подстановке в сигнатуру
+функции, ведь у std::nullptr_t нет внутреннего типа `botva`.
+
+А в случае с `foo(10, 10)` не получится найти ни одной корректной перегрузки и поэтому произойдёт CE.
+
+Теперь рассмотрим случай, когда задуманное не работает, то есть, когда мы думаем, что используем SFINAE, но, оказывается, что не совсем.
+
+```c++
+struct BotvaHolder {
+    using botva = int;
+};
+
+template<typename T>
+struct GetBotva {
+    using type = typename T::botva;  // hard compilation error.
+};
+
+template<typename T>
+void foo(T, typename GetBotva<T>::type) {  // Ошибка компиляции, потому что проблема возникла уже внутри GetBotva.
+    std::cout << "1\n";
+}
+
+template<typename T>
+void foo(T, std::nullptr_t) {
+    std::cout << "2\n";
+}
+
+ foo(BotvaHolder(), 10);  // 1
+ foo(BotvaHolder(), nullptr);  // 2
+ // foo(10, 10);  // CE
+ foo(10, nullptr); // 2
+```
+
+В данном случае у нас не работает SFINAE, так как в сравнении с предыдущим примером 
+у нас ошибка произойдёт при попытке инстанцировать шаблонную структуру `GetBotva` on `int`. 
+То есть, идея в том, что мы уже попытаемся внутри этой структуры залезть в `int::botva`, 
+что вызовет ошибку компиляции, но это не приведёт к тому, что эта перегрузка просто не будет рассмотрена. 
+Это приведёт к моментальной ошибке компиляции, чего мы вряд ли хотели
