@@ -300,7 +300,7 @@ void foo(int x) {  // Атомарная операция, atomic.
 }
 
 void double_foo(int x) {
-    std::unique_lock l(m2); // deadlock
+    std::unique_lock l(m2);
     foo(x);
     foo(x + 1);
 }
