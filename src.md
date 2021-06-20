@@ -8,20 +8,6 @@
 ## Parameter pack и variadic template ##
 
 Идея- можем передавать в шаблон несколько разных параметров.
-
-``` cpp
-// Обыкновенный шаблон
-template<typename T>
-void print_all(const T &value) {
-    std::cout << value;
-}
-int main() {
-    print_all(10);
-    print_all(12.23);
-}
-```
-
-Допустим, есть цель передавать много параметров в функцию.
 Начиная с C++11 появилось `...`:
 
 ``` cpp
@@ -31,29 +17,17 @@ void print_all(const Ts &...value) { // Каждый имеет независи
     // Экивалентно
     // std::cout << v1 << v2 << v3;
 }
-
-int main() {
-    print_all(10);
-    print_all(12.23);
-}
 ```
 
 Мнемоническое правило- если вводится `parameter pack`, то многоточия ставятся слева от того, что объявили.
 
-Важно, что `parameter pack` объявляется в конце списка шаблонных параметров,
-чтобы было понятно, где заканчивается список параметров:
+Важно, что `parameter pack` объявляется в конце списка шаблонных параметров, чтобы было понятно, где заканчивается список параметров.
+
+Чтобы узнать размер полученного набора переменных, можно использовать
+оператор `sizeof...`:
 
 ```cpp
 template<typename T, typename ...Ts>
-void print(const T &arg0, const Ts &...arg1) {
-}
-```
-
-Чтобы узнать размер полученного набора переменных, можно использовать
-оператор `sizeof`:
-
-```cpp
-template<typename ...Ts>
 struct Foo {
     std::size_t size = sizeof...(Ts);
 }
@@ -76,7 +50,7 @@ struct Foo {
 }
 ```
 
-Можно это использовать, чтобы сохрнаить список аргументов (альтернатива `std::tuple`):
+Можно это использовать, чтобы сохранить список аргументов (альтернатива `std::tuple`):
 
 ```cpp
 template<typename ...Ts>
@@ -125,11 +99,8 @@ template<typename ...Ts>
 void sum_all(const Ts &...value) {
     return (10 + ... + value);
     // return (value + ... + 10);
-    // Скобки важны, так как fold expression должен быть отдельный выражением
-}
-
-int main() {
-    std::cout << sum_all(1, 2, 3) << "\n";
+    // Скобки важны, так как fold expression должен быть 
+    //                                  отдельный выражением
 }
 ```
 
@@ -140,11 +111,6 @@ int main() {
 template<typename ...Ts>
 void sum_all(const Ts &...value) { 
     return (... + value);
-}
-
-int main() {
-    // std::cout << sum_all() << "\n";
-    std::cout << sum_all(1) << "\n";
 }
 ```
 
@@ -162,18 +128,15 @@ void print_all(const Ts &...args) {
     /* Раскрывается в
         * std::cout << arg1 << "\n"
         * std::cout << arg2 << "\n"
-    */ ...
-}
-
-int main() {
-    print_all(10, 12.34);
+    */
 }
 ```
 
 Важен синтаксис `((std::cout << args << "\n"), ...)`:
 
 * `(std::cout << args << "\n"),  ...` - компилятор не поймет, что это выражение.
-* `(std::cout << args << "\n", ...)` - компилятор посчитает, что это какая-то "сложная штуковина".
+* `(std::cout << args << "\n", ...)` - компилятор не сможет
+обработать выражение.
 
 Альтернативный способ написать то, что выше:
 
@@ -185,10 +148,6 @@ void print_all(const Ts &...args) {
     }
     (f(args), ...);
 }
-
-int main() {
-    print_all(10, 12.34);
-    }
 ```
 
 Обратите внимание, что auto в объявлении лямбды принципиально, так как могут быть аргументы разных типов.
@@ -210,24 +169,20 @@ void print_all_increased(const Ts &...args) {
     print_all(">", args..., "<", (args + 10)... , "!"); 
     // Запись (args + 10)... добавляем к каждому элементу из args 10
 }
-
-int main() {
-    print_all_increased(1, 2, 3);
-}
 ```
 
 Способ проверить типы: `static_assert((... && std::is_same_v<Ts, int>));`,
 начиная с C++20- requires после объявления шаблонных параметров в сигнатуре.
 
 Можно менять ассоциативность при развертывании аргументов:
- 
+
 * `(args + ...) = arg0 + (arg1 + arg2)`
 * `(... + args) = (arg2 + arg1) + arg0`
 * Для унарного `fold expression`  требуется непустой args, кроме операторов `&& || ,`
 * Бинарный `(0 + ... + args)` может работать и с пустым
-* Аналогично с ассоциативаностью: `(args + ... + 0) = arg0 + (arg1 + 0)`
+* Аналогично с ассоциативностью: `(args + ... + 0) = arg0 + (arg1 + 0)`
 * `(0 + ... + args) = (0 + args) + arg1`
- 
+
 ## Tuple ##
 
 Чтобы написать `std::tuple` воспользуемся частичной реализацией шаблонов.
@@ -241,8 +196,6 @@ struct tuple<T, Args...> {
     tuple<Args...> tail;
 } inst;
 ```
-
-Зная, что обращение, например, к 2-му элементу происходит при помощи `inst.tail.head`, легко написать `get`.
 
 Чтобы узнать размер `tuple` создадим вспомогательную метафункцию:
 
@@ -306,10 +259,6 @@ void timed(Fn fn, Arg0 arg0) {
     std::cout << std::chrono::duration_cast<std::chrono::milliseconds>
                     (duration).count() << "ms\n";
 }
-
-int main() {
-    timed(calc, 500);
-}
 ```
 
 Хотим научиться передавать в алгорит дополнительный флаг `completed`.
@@ -327,11 +276,6 @@ void timed(Fn fn, Arg0 arg0, Arg1 &arg1) {
     auto duration = std::chrono::steady_clock::now() - start;
     std::cout << std::chrono::duration_cast<std::chrono::milliseconds>
                     (duration).count() << "ms\n";
-}
-
-int main() {
-    bool completed = false;
-    timed(calc, 500, completed);
 }
 ```
 
@@ -354,11 +298,6 @@ void timed(Fn fn, Arg0 &&arg0, Arg1 &&arg1) {
     auto duration = std::chrono::steady_clock::now() - start;
     std::cout << std::chrono::duration_cast<std::chrono::milliseconds>
                     (duration).count() << "ms\n";
-}
-
-int main() {
-    bool completed = false;
-    timed(calc, 500, completed);
 }
 ```
 
@@ -459,11 +398,6 @@ void timed(Fn fn, Arg0 &&arg0, Arg1 &&arg1) {
     std::cout << std::chrono::duration_cast<std::chrono::milliseconds>
                     (duration).count() << "ms\n";
 }
-
-int main() {
-    bool completed = false;
-    timed(calc, 500, completed);
-}
 ```
 
 Уже знаем, что при вызове `timed` значение `500` типа `Arg0` приведется к
@@ -518,11 +452,7 @@ void worker(int x, int &y) {
     cout << x << " " << y;
 }
 
-int main() {
-    int y = 20;
-    std::thread t(worker, 10, std::ref(y));
-    t.join();
-}
+std::thread t(worker, 10, std::ref(y));
 ```
 
 Для константых ссылок есть `std::cref`:
@@ -533,20 +463,18 @@ void worker(int x, int &y, const int &z) {
     cout << x << " " << y << " " << z;
 }
 
-int main() {
-    int y = 20, z = 30;
-    std::thread t(worker, 10, std::ref(y), std::cref(z));
-    
-    /* Так тоже сработает, потому что автовывод поймет,
-     *                              что это ссылка на константу
-     * std::thread t(worker, 10, std::ref(y), std::ref(z)); 
-    */
 
-    /* И так тоже- значение просто скопируется
-     * std::thread t(worker, 10, std::ref(y), z);
-    */
-    t.join();
-}
+std::thread t(worker, 10, std::ref(y), std::cref(z));
+    
+/* Так тоже сработает, потому что автовывод поймет,
+ *                              что это ссылка на константу
+ * std::thread t(worker, 10, std::ref(y), std::ref(z)); 
+*/
+
+/* И так тоже- значение просто скопируется
+ * std::thread t(worker, 10, std::ref(y), z);
+*/
+
 ```
 
 В случае `perfect forwarding` все аргументы передаются по ссылкам
