@@ -130,3 +130,420 @@
 		std::cout << "data is " << data << "\n";
 		```
 		В данном случае может произойти так, что выведется нечетное значение. Так происходит, потому что между проверкой и выводом, внутри потока (который захватил `data` по ссылке - может произойти изменение).
+
+
+# Борьба с гонками: mutex, амомарные снимки, RAII-обёртка над мьютексом
+### Mutex
+`std::mutex` - переменная, которую можно захватывать и всего один поток может это сделать, а если попытается другой поток захватить, а её ещё не отпустили, то этот поток начинает её "ждать".
+
+Простой пример:
+```cpp
+void function(const char *s) {
+    std::mutex m;
+    m.lock();
+    for (int i = 0; s[i]; i++) {
+        std::cout << s[i];
+    }
+    m.unlock();
+}
+
+WARNING: должен быть только один mutex!
+ANSWER:
+1. Сделать глобальной переменной
+2. Сделать static переменной
+```
+---
+### Aтомарные снимки:
+Мотивация: ~~если вы волк~~ рассмотрим пример
+```cpp
+int data = 0;
+auto worker = [&data]() {
+    for (int i = 0; i < N; i++) {
+        data++;
+    }
+};
+std::thread t(worker);
+for (int i = 0; i < M; i++) {
+    if(data % 2 == 0){
+
+        // нет никакой гарантии, что уже на этой строчке data % 2 == 0
+
+        std::cout << "data is " << data << " (in progress)\n";
+    }
+}
+t.join();
+std::cout << "data is " << data << "\n";
+```
+### Снятие снимка - сохраняем знаничение в новую переменную и "шаманим" уже с ней
+```cpp
+for (int i = 0; i < M; i++) {
+    data_snapshot = data;
+    if(data_snapshot % 2 == 0){
+        std::cout << "data is " << data_snapshot << " (in progress)\n";
+    }
+}
+```
+Запомнить: UB может происходить, когда один поток в переменую записывает, а другой пытается считать значение
+
+Вот так хорошо:
+```cpp
+std::mutex m;
+int data = 0;
+auto worker = [&data, &m]() {
+    for (int i = 0; i < N; i++) {
+        std::unique_lock l{m};
+        data++;
+    }
+};
+std::thread t1(worker);
+std::thread t2(worker);
+for (int i = 0; i < M; i++) {
+    std::unique_lock l(m);
+    int data_snapshot = data;
+    l.unlock();  // Не m.unlock()! Иначе unique_lock сделает unlock() ещё раз, это UB.
+
+    if (data_snapshot % 2 == 0) {
+        std::cout << "data is " << data_snapshot << " (in progress)\n";
+    }
+}
+t2.join();
+t1.join();
+std::cout << "data is " << data << "\n";
+```
+
+### Атомарная операция - либо выполняется полностью, либо не выполняется вовсе
+
+> Не пытаться использовать atomic, там жесть как только больше одной переменной (то есть почти всегда). (Егор Федорович)  
+---
+### RAII-обвёртка над std::mutex
+`std::unique_lock` - захватывает `std::mutex` при создании и отпускает при удалении
+```cpp
+void function(const char *s) {
+    std::unique_lock l{m};
+    for (int i = 0; s[i]; i++) {
+        std::cout << s[i];
+    }
+}
+
+WARNING:
+Нельзя писать std::unique_lock{m}; т.к. тогда объект уничтожается при ";"
+```
+---
+## WARNING - за такое руки отрубают!
+`std::this_thread::yield()` -  позволяет ОП самой давать возможность другим потокам работать
+```cpp
+std::thread t([]() {
+    for (;;) {
+        writeln("Hello from the second thread");
+            // std::this_thread::yield();  // Костыль!
+    }
+});
+```
+
+`std::sleap` - лучше *****, но не бей. Очень люто, лишь делает вид, что всё работает!
+
+---
+# Reentrant-функции, recursive_mutex, deadlock, порядок взятие блокировок, избегание блокировок
+### Reentrant-функции
+Хотим вот так сделать:
+```cpp
+void foo(int x) {  // Атомарная операция, atomic.
+    std::unique_lock l(m);
+    std::cout << "foo(" << x << ")\n";
+}
+
+void double_foo(int x) {  // Неатомарная операция :(
+    foo(x);
+    foo(x + 1);
+}
+
+int main() {
+    const int N = 100'000;
+    std::thread t([]() {
+        for (int i = 0; i < N; i += 10)
+            double_foo(i);
+    });
+    for (int i = 0; i < N; i += 10)
+        double_foo(N + i);
+    t.join();
+}
+```
+Не решения:
+1) Если два раза взять mutex - нельзя, даже одному потоку, получим deadlock
+2) Два mutex - не решило проблему, т.к. они mutex разные мы будем брать
+
+Решения:
+1) recursive_mutex - можно, даже будет работать, но 
+   - замедляет выполнение программы 
+   - сложнее работать 
+   - плохой тон
+2) Разделить функцию на две
+```cpp
+1)
+std::mutex m;
+void foo(int x) {  // Атомарная операция, atomic.
+    std::unique_lock l(m);
+    std::cout << "foo(" << x << ")\n";
+}
+
+void double_foo(int x) {
+    std::unique_lock l(m); // deadlock
+    foo(x);
+    foo(x + 1);
+}
+
+2)
+std::mutex m1,m2;
+void foo(int x) {  // Атомарная операция, atomic.
+    std::unique_lock l(m1);
+    std::cout << "foo(" << x << ")\n";
+}
+
+void double_foo(int x) {
+    std::unique_lock l(m2); // deadlock
+    foo(x);
+    foo(x + 1);
+}
+
+3) код аналогичен 1-ому псевдо-решению
+std::recursive_mutex m; 
+
+4) 
+// Приватный интерфейс.
+void foo_lock_held(int x) {
+    std::cout << "foo(" << x << ")\n";
+}
+
+// Публичный интерфейс из атомарных операций.
+// Над ним надо очень хорошо думать, потому что комбинация двух атомарных операций неатомарна.
+void foo(int x) {
+    std::unique_lock l(m);
+    foo_lock_held(x);
+}
+
+void double_foo(int x) {
+    std::unique_lock l(m);
+    foo_lock_held(x);
+    foo_lock_held(x + 1);
+} 
+```
+---
+### recursive-mutex - в примере выше используется
+---
+### Deadlock - вечное ожидание
+---
+### Порядок взятия блокировок
+~~Как-то раз Близнец произнёс: Представьте, что вы миллиардер!~~
+
+Представьте, что вы банк, и у вас целых 2 несчастных бабушки, которые делают 1000 транзакций в секунду (а если счастливая бабушка, которая учится на ПМИ, то и 1-ой транзакции хватит), тогда может быть проблемка с взятием mutex:
+```cpp
+std::mutex m1, m2;
+std::thread t1([&]() {
+    for (int i = 0; i < N; i++) {
+        std::unique_lock a(m1);
+        std::unique_lock b(m2);
+    }
+});
+std::thread t2([&]() {
+    for (int i = 0; i < N; i++) {
+        std::unique_lock b(m2);
+        std::unique_lock a(m1);
+    }
+});
+```
+---
+### Избегание блокировок
+Решение:
+1) Завести глобальный порядок на взятие mutex (осторожно UB: адреса элемнентов, которые лежат не в одном массиве сравнивать нельзя - но можно использовать ```std::less<std::mutex*>(&m1, &m2)```)
+2) std::scoped_lock(m1, m2) - сама подбирает порядок так, чтобы не заблокироваться
+---
+# Условные переменные, spurious wakeup, реализация producer-consumer, реализация promise/future (без shared_future)
+### Условные переменные
+```cpp
+// Можно так сделать, но:
+// 1) Активное ожидание из-за постоянного "хватания" мьютекса в consumer
+// 2) Из-за такого ожидания, то должно повести, чтобы q.push_data заработал, чтобы он взял mutex
+// 3) Может быть активная гонка: если 2 consumer, то может быть UB т.к. два потока поняли, что q.empty() != 0, один сделал q.pop, теперь второй тоже это делает и это UB, т.к. очередь уже пуста
+
+producer:
+while(true){
+    int data = read_int();
+    q.push_data(); // потокобезопасная очередь
+}
+
+consumer:
+while(true){
+    while(q.empty(){
+    })
+    process_data(q.pop());
+}
+```
+Некоторая модификация:
+```cpp
+// Вводим event:
+// e.wait() - усыпляет поток
+// e.notify() - будит уснувший поток
+
+producer:
+while(true){
+    int data = get_data();
+    q.push(data);
+    e.notify();
+}
+
+consumer{
+    if(!q.empty()){
+        process_data(q.pop());
+    } else {
+        e.wait();
+    }
+}
+```
+Но тут снова есть проблемы: 
+- Есть проблема с одим consumer: notify может неудачно произойти - если мы запихнули в очередь элемент, зайшли в else в cоnsumer, но notify произошёл перед wait
+
+Решения проблемы:
+- WindowsAPI - решили так, если делаем notify, то он будит следующий поток, который заснёт, если уже кто-то спал, то будит. Существует минус: есть дополнительное состояние
+- Можно добавить `std::mutex`
+  
+Deadlock:
+```cpp
+// тут есть deadlock
+
+producer:
+while(true){
+    int data = get_data();
+    pthread_mutex_lock(&m);
+    q.push(data);
+    e.notify();
+    pthread_mutex_unlock(&m);
+}
+
+consumer:
+while(true){
+    pthread_mutex_lock(&m);
+    if(!q.empty()){
+        process_data(q.pop());
+    } else {
+        e.wait(); // жадный! mutex не отпустил!
+    }
+    pthread_mutex_unlock(&m);
+}
+```
+
+### conditional_variable - это способ оповещать потоки о возможности изменения некоторого условия, защищённого мьютексом. Привязан к условию! Если не привязан к условию = бесполезно использовать!!!
+```cpp
+pthread_mutex_t m;
+pthread_cond_t t;
+// producer
+while(true){
+    int data = get_data();
+    pthread_mutex_lock(&m);
+    q.push(data);
+    pthread_cond_signal(&cond);
+    pthread_mutex_unlock(&m);
+}
+
+//consumer
+while(true){
+    pthread_mutex_lock(&m);
+    if(!q.empty()){
+        pthread_cond_wait(&cond); // отпускает mutex и начинате ждать
+        process_data(q.pop());
+    } else {
+        e.wait(); // жадный! mutex не отпустил!
+    }
+    pthread_mutex_unlock(&m);
+}
+```
+Хороший пример:
+```cpp
+std::mutex m;
+std::string input;
+bool input_available = false;
+std::condition_variable cond;
+
+std::thread producer([&]() {
+    while (true) {
+        std::string input_buf;
+        std::cin >> input_buf;  // Не держим мьютекс на долгих операциях.
+
+        std::unique_lock l(m); // именно тут, если выше std::cin, то может быть, что thread отпускает и быстро забирает mutex
+        input = std::move(input_buf); // нужно, чтобы не было UB (почему? чтение и запись могут происходить одновременно)
+        input_available = true;
+        cond.notify_one(); // будим одного consumer (рандомного)
+    }
+});
+
+std::thread consumer([&]() {
+    while (true) {
+        std::unique_lock l(m);
+        cond.wait(l, [&]() { return input_available; }); // это нужно вместо while(!input_available);
+        std::string input_snapshot = std::move(input);  // Тут тоже можно соптимизировать и добавить move.
+        input_available = false;
+        l.unlock();
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+        std::cout << "Got string: " << input_snapshot << "\n";
+    }
+});
+
+consumer.join();
+producer.join();
+```
+
+> Мораль от Егора:
+>* Никогда не модифицируйте ничего без мьютекса!
+>  Даже если сейчас не стреляет, ловить потом будет сложно.
+>* Не надо брать мьютекс надолго.
+>* Обычно проще писать не через condvar'ы, а через future или каналы (потокобезопасная очередь сообщений).
+> * Но ещё лучше вообще писать без потоков или хотя бы не синхронизировать ничего руками.
+
+---
+### Spurious wakeup - системе иногда удобней разбудить все потоки, поэтому нужно писать while, а не if в коде выше
+
+---
+### Реализация producer-consumer - см. выше и ниже!!!
+---
+### Реализация promise/future
+```
+std::promise<std::string> input_promise;
+std::future<std::string> input_future = input_promise.get_future();
+
+std::thread producer([&]() {
+    std::string input;
+    std::cin >> input;
+    input_promise.set_value(std::move(input));
+});
+
+std::thread consumer([&]() {
+    std::cout << "Consumer started\n";
+    std::string input = input_future.get();
+    std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+    std::cout << "Got string: " << input << "\n";
+});
+
+consumer.join();
+producer.join();
+```
+1. producer - данные генерирует
+2. consumer - данные потребляет
+
+promise и future - два конца одного канала:
+
+1. ```std::promise<std::string> input_promise``` - создали promise и его начальное значение "обещание не выполнено"
+2. ```input_promise.set_value("123")``` - обещание выполнено и значение = 123
+3. ```std::future<std::string> input_future = input_promise.get_future()``` - у promise есть future
+4. ```std::string input = input_future.get()``` - блокируется строчка, пока promise не передаст сообщение
+5. Можно несколько future сделать - ```std::future::share```
+
+
+Можно сделать так, но тут мало гарантий, где? когда? это будет выполняться неизвестно:
+```
+std::future<std::string> input_future = std::async([]() {
+    std::string input;
+    std::cin >> input;
+    return input;
+});
+```
+---
