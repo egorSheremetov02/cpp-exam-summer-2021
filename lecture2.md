@@ -7,8 +7,8 @@
 ```c++
 template <typename F, typename ...Ts>
 /*непонятно, что тут написать*/ logged(F f, Ts &&...args) {
-    std::cout << "Before function invocation" << std::endl;
-    return f((std::forward<Ts>(args))...);
+std::cout << "Before function invocation" << std::endl;
+return f((std::forward<Ts>(args))...);
 }
 ```
 
@@ -62,19 +62,19 @@ decltype((x)); // int &
 int x;
 
 auto foo() {
-    // --> int foo()
-    return x;
+// --> int foo()
+return x;
 }
 
 decltype(auto) bar() {
-    // --> int bar (выводится int, так как 'x' был объявлен c типом int)
-    return x;
+// --> int bar (выводится int, так как 'x' был объявлен c типом int)
+return x;
 }
 
 decltype(auto) baz() {
-    // --> int & baz() (выводится int&, так как тип выводится по правилам decltype)
-    // это выражение
-    return (x);
+// --> int & baz() (выводится int&, так как тип выводится по правилам decltype)
+// это выражение
+return (x);
 }
 
 ```
@@ -84,17 +84,81 @@ decltype(auto) baz() {
 ```c++
 template <typename F, typename ...Ts>
 decltype(auto) logged(F f, Ts &&...args) {
-  std::cout << "Before function invocation" << std::endl;
-  return f((std::forward<Ts>(args))...);
+std::cout << "Before function invocation" << std::endl;
+return f(std::forward<Ts>(args)...);
 }
 ```
 
 А ещё всё это можно написать в виде лямбды
 
 ```c++
-auto logged = [&](auto f, auto &&...args) -> decltype(auto) {
-  std::cout << "Before function invocation" << std::endl;
-  return f(std::forward<decltype(args)>(args)...);
+auto logged =[&](auto f, auto &&...args) -> decltype(auto) {
+std::cout << "Before function invocation" << std::endl;
+return f(std::forward<decltype(args)>(args)...);
 };
 ```
 
+## Указатель на члены класса
+
+Иногда может хотеться сохранить указатель на какой-то член класса в переменную.
+
+Рассмотрим пример, как такое можно сделать
+
+```c++
+struct S {
+int x = 1;
+int y = 2;
+int foo(int t) { return x + y + t; }
+int bar(int t) const {
+return x + y + t + 10; }
+};
+
+S obj;
+// создаём указатель a на поле 'x' класса S
+int (S::*a) = &S::x;
+// создаём указатель b на поле 'y' класса S
+int (S::*b) = &S::y;
+```
+
+Синтаксис, безусловно, крайне упоротый. Но это ещё не всё! Вот как можно обращаться к полю, которое лежит по этому
+указателю
+
+```c++
+int x1 = obj.*a;
+S *objptr = &obj;
+int y1 = objptr->*b;
+```
+
+Кстати, их тоже можно переприсваивать
+
+```c++
+a = b;
+// теперь мы так обращаемся к полю 'y', а не 'x'
+obj.*a;
+```
+
+В целом, аналогично полям можно работать с указателями на методы класса
+
+```c++
+int (S::*fooptr)(int) = &S::foo;
+std::cout << (obj.*fooptr)(10) << std::endl;
+```
+
+**С указателями на методы важно не забывать сохранять const-qualifier**
+
+```c++
+int (S::*barptr)(int) const = &S::bar;
+```
+
+Кстати, возникают все стандартные проблемы с перегрузками.
+
+Это всё, конечно, очень задорно и весело, можно пугать детей и всё такое, но **зачем???**
+
+Ну оказывается, что с помощью этого механизма удобно писать какие-нибудь сериализаторы.
+
+Кстати говоря, указатели на члены несовместимы с обычными указателями
+
+1. Указатель на поле -- это сдвиг внутри объекта. Это не `void*` и не указатель на объект
+2. Указатель на метод несовместим даже с обычными указателями на функцию
+   1. Бывают виртуальные функции и виртуальное наследование
+   2. Надо поддерживать преобразования по иерархии
