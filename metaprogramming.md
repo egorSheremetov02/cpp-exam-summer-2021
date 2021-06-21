@@ -490,7 +490,7 @@ std::thread t(worker, 10, std::ref(y), std::cref(z));
 
 ```cpp
 int main {
-    struct () {
+    struct {
         int state = 100;
         operator()(int value) {
             std::cout << "state=" << state << ", value=" << value << " ";
