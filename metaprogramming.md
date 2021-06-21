@@ -185,7 +185,7 @@ void print_all_increased(const Ts &...args) {
 
 ## Tuple ##
 
-Чтобы написать `std::tuple` воспользуемся частичной реализацией шаблонов.
+Чтобы написать `std::tuple` воспользуемся частичной специализацией шаблонов.
 
 ```cpp
 template<typename ...Ts> struct tuple{};
