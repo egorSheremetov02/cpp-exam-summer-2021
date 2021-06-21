@@ -56,7 +56,7 @@ struct Foo {
 ```cpp
 template<typename ...Ts>
 struct Foo{
-    template<Ts ...values> Bar{};
+    template<Ts ...values> struct Bar{};
 };
 
 Foo<int, int(*)()>::Bar<10, func> x;
