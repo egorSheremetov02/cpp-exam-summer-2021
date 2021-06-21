@@ -97,7 +97,7 @@ Foo<10, func, func> x;
 
 ```cpp
 template<typename ...Ts>
-void sum_all(const Ts &...value) {
+int sum_all(const Ts &...value) {
     return (10 + ... + value);
     // return (value + ... + 10);
     // Скобки важны, так как fold expression должен быть 
