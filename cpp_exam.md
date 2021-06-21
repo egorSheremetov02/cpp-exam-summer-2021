@@ -447,11 +447,11 @@ while(true){
 //consumer
 while(true){
     pthread_mutex_lock(&m);
+    while(q.empty()){
+        pthread_cond_wait(&cond);
+    }
     if(!q.empty()){
-        pthread_cond_wait(&cond); // отпускает mutex и начинате ждать
         process_data(q.pop());
-    } else {
-        e.wait(); // жадный! mutex не отпустил!
     }
     pthread_mutex_unlock(&m);
 }
@@ -481,7 +481,7 @@ std::thread consumer([&]() {
         cond.wait(l, [&]() { return input_available; }); // это нужно вместо while(!input_available);
         std::string input_snapshot = std::move(input);  // Тут тоже можно соптимизировать и добавить move.
         input_available = false;
-        l.unlock();
+        l.unlock(); // так можно делать, т.к. unlock именно unique_lock делаем
 
         std::this_thread::sleep_for(std::chrono::milliseconds(2000));
         std::cout << "Got string: " << input_snapshot << "\n";
