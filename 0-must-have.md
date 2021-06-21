@@ -117,8 +117,25 @@ for (const auto& i : v) {
 `template<typename T>`
 структура/функция
 
-а подробно [тут](https://drive.google.com/drive/folders/11Mdp0R46nY-dklE8ycUkGxPbZckeic6Y)
-
+stack поверх deque:
+```C++
+template <class T>
+class stack {
+private:
+    std::deque<T> st;
+public:
+    stack() = default;
+    void push_back(T other) & {
+        st.push_back(other);
+    }
+    void pop_back(){
+        st.pop_back();
+    }
+    T &top_back() & {
+        return st.back();
+    }
+};
+```
 ## Классы
 ### Определение класса, конструктор, деструктор, методы
 **Класс** - пользовательский тип данных.
