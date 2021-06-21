@@ -410,50 +410,45 @@ Deadlock:
 ```cpp
 // тут есть deadlock
 
-producer:
+// producer
 while(true){
     int data = get_data();
-    pthread_mutex_lock(&m);
-    q.push(data);
+    std::unique_lock l{m};
+    q.push(data);	
     e.notify();
-    pthread_mutex_unlock(&m);
 }
 
-consumer:
+//consumer
 while(true){
-    pthread_mutex_lock(&m);
+    std::unique_lock l{m};
     if(!q.empty()){
-        process_data(q.pop());
+    	process_data(q.pop());
     } else {
-        e.wait(); // жадный! mutex не отпустил!
+    	e.wait; // жадный! mutex не отпустил!
     }
-    pthread_mutex_unlock(&m);
 }
 ```
 
 ### conditional_variable - это способ оповещать потоки о возможности изменения некоторого условия, защищённого мьютексом. Привязан к условию! Если не привязан к условию = бесполезно использовать!!!
 ```cpp
-pthread_mutex_t m;
-pthread_cond_t t;
+std::mutex m;
+std::conditional_variable cond;
+
 // producer
 while(true){
     int data = get_data();
-    pthread_mutex_lock(&m);
+    std::unique_lock l{m};
     q.push(data);
-    pthread_cond_signal(&cond);
-    pthread_mutex_unlock(&m);
+    cond.notify_one();
 }
 
 //consumer
 while(true){
-    pthread_mutex_lock(&m);
+    std::unique_lock l{m};
     while(q.empty()){
-        pthread_cond_wait(&cond);
+        cond.wait(l);
     }
-    if(!q.empty()){
-        process_data(q.pop());
-    }
-    pthread_mutex_unlock(&m);
+    process_data(q.pop());
 }
 ```
 Хороший пример:
